@@ -201,10 +201,56 @@ def wedding_planning():
     or
         "There is no acceptable seating arraignment"
     """
-    #TODO: YOUR CODE HERE
+    
 
+    s = Solver()
 
+    l, m, r = Ints('l m r')
+    alice, bob, charlie = Ints('alice bob charlie')
 
+    # Define seat values
+    s.add(l == 1, m == 2, r ==3)
+
+    # Assign Seats
+    s.add(Or(alice == l, alice == m, alice == r))
+    s.add(Or(bob == l, bob == m, bob == r))
+    s.add(Or(charlie == l, charlie == m, charlie == r))
+
+    # Cannot share the same seat
+    s.add(Distinct(alice, bob, charlie))
+
+    # expnasion of diff(x,y) != 1
+        # x-y != 1 and x-y != -1 ===> not to my left and not to my right (not next to me)
+    s.add(And(alice - charlie != 1, alice - charlie != -1))
+    
+    # alice != left
+    s.add(alice != l)
+
+    # # Bob is not to the right of charlie
+    s.add(Not(bob > charlie))
+
+    match s.check():
+        case z3.unsat:
+            print("There is no acceptable seating arraignment")
+        case z3.sat:
+            seats = ['left', 'middle', 'right']
+            people = ['bob', 'charlie', 'alice']
+            arrangement = [None] * len(seats)
+
+            m = s.model()
+            for x in m.decls():
+                person = x.name()
+                if (person in people):
+                    seat = m[x].as_long() - 1
+                    arrangement[seat] = person
+    
+            seat_map = dict(zip(seats, arrangement))
+
+            print(f"{seat_map['left']} sits on the left, "
+                f"{seat_map['middle']} in the middle, "
+                f"and {seat_map['right']} on the right.")
+
+# wedding_planning()
 
 
 """
@@ -244,6 +290,8 @@ instance = ((0,0,0,0,9,4,0,3,0),
             (9,0,0,0,6,5,0,0,0),
             (0,4,0,9,7,0,0,0,0))
 
+sudoku(instance)
+print_sudoku(instance)
 
 
 """
