@@ -276,8 +276,57 @@ def sudoku(puzzle):
     """
     Use print_sudoku to print your solution to puzzle or otherwise print "The puzzle is impossible.".
     """
-    #TODO: YOUR CODE HERE
 
+    s = Solver()
+
+    # Every position has an identifier with a value = (1-9)
+    board = []
+    for row in range(len(puzzle)):
+        row_values = []
+        for col in range(len(puzzle[0])): 
+            x = Int(f'{row}_{col}')
+            if (puzzle[row][col] == 0):
+                s.add(And(0 < x, x < 10)) # Range of values
+            else:
+                s.add(x == puzzle[row][col]) # intial board
+            row_values.append(x)
+        board.append(row_values)
+    
+    # Each Row needs to have values 1-9
+    for row_values in board:
+        s.add(Distinct(*row_values))
+    
+    # Distinct Columnns
+    for col in range(len(board[0])):
+        col_values = []
+        for row in range(len(board)):
+            col_values.append(board[row][col])
+        s.add(Distinct(*col_values))
+    
+    # Distinct 3x3 Boxess
+    for row in range (0, len(board), 3):
+        for col in range (0, len(board[0]), 3):
+            #Note: Could use NumPy here instead
+            box_values = []
+            for i in range(3):
+                for x in range(3):
+                    box_values.append(board [row + i][col + x])
+            s.add(Distinct(*box_values))
+
+    match s.check():
+        case z3.unsat:
+            print("The puzzle is impossible.")
+        case z3.sat:
+            m = s.model()
+            solved = []
+            for row in range(9):
+                solved_row = []
+                for col in range(9):
+                    val = m.evaluate(board[row][col]).as_long()
+                    solved_row.append(val)
+                solved.append(solved_row)
+
+            print_sudoku(solved)
 
 
 instance = ((0,0,0,0,9,4,0,3,0),
@@ -291,7 +340,6 @@ instance = ((0,0,0,0,9,4,0,3,0),
             (0,4,0,9,7,0,0,0,0))
 
 sudoku(instance)
-print_sudoku(instance)
 
 
 """
@@ -309,6 +357,7 @@ The question is: How many ways can $2 be made using any number of coins?
 def coin_sum(total):
     # Variables for the numbers of each coin denomination
     p,n,d,q,f,d = Ints('p n d q f d')
+
 
     """
     Print the number of ways the $2 can be made using any number of the above coins.
