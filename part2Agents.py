@@ -46,7 +46,6 @@ class SpellCastingPuzzleWizard(WizardAgent):
 
 
 
-
 """
 Here are some reference solutions for some of the included puzzle maps you can use to help you test things
 """

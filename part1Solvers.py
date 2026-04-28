@@ -1,15 +1,21 @@
 import z3
-from z3 import (Solver, Bool,Bools,Int,Ints, Or, Not, And, Implies, Xor, BitVec, BV2Int, Reals, Distinct, If)
+from z3 import (Solver, Bool, Bools, Int, Ints, Or, Not, And, Implies, Xor, BitVec, BV2Int, Reals, Distinct, If)
 
 """
-Suppose we want to find a satisfying assignment for the expression (a || !b) && (!a || c). That means we’re looking for values of a, b, and c that make the entire expression evaluate to true.
+Suppose we want to find a satisfying assignment for the expression (a || !b) && (!a || c). 
+That means we’re looking for values of a, b, and c that make the entire expression evaluate to true.
 
-One way to approach this is by checking all possible combinations of truth values for a, b, and c. Since each variable can be either true or false, there are 2^3=8 possible combinations.
+One way to approach this is by checking all possible combinations of truth values for a, b, and c. 
+Since each variable can be either true or false, there are 2^3=8 possible combinations.
 
 Can you list all 8 combinations of a, b, and c?
 
-In general, for n variables, there will be 2^n possible assignments, so the approach of "trying everything" is not efficient for large n. In fact, this is the SAT ("satisfiability") problem, which is NP-complete, meaning that it is "one of the hardest problems to which solutions can be verified quickly. But this difficult problem is exactly what tools like the Z3 SMT solver! Here’s how we can solve the problem using the Z3:
+In general, for n variables, there will be 2^n possible assignments, so the approach of "trying everything" 
+is not efficient for large n. In fact, this is the SAT ("satisfiability") problem, which is NP-complete, 
+meaning that it is "one of the hardest problems to which solutions can be verified quickly. 
+But this difficult problem is exactly what tools like the Z3 SMT solver! Here’s how we can solve the problem using the Z3:
 """
+
 def boolean_expressions():
     a = Bool('a')
     b = Bool('b')
@@ -46,7 +52,8 @@ def boolean_expressions():
             print(f_2_model)
 
     """
-    This output says that the formula (a || !b) && (!a || c) will be true when b is false and c is true (it doesn’t matter what a is).
+    This output says that the formula (a || !b) && (!a || c) will be true 
+    when b is false and c is true (it doesn’t matter what a is).
 
     Let’s try adding one more constraint
     """
@@ -57,23 +64,22 @@ def boolean_expressions():
         case z3.unsat:
             print("Unsatisfiable")
     """
-    The output unsat means unsatisfiable. The solver is telling us that there is no possible choice of a, b, c that makes the current constraints true.
+    The output unsat means unsatisfiable. 
+    The solver is telling us that there is no possible choice of a, b, c that makes the current constraints true.
     """
-
-
-
-
 
 """
 Z3 can find solutions to more than just SAT problems – it is an SMT solver.
 
-SMT stands for SAT modulo theories; it generalizes SAT to formulas involving integers, strings, arrays, and so on (the details of how it can do this are interesting but complicated, and we probably wont be able to get to them in class). For example, we can use Z3 to find a solution for the system of equations 3x - 2y = 1, y - x = 1.
+SMT stands for SAT modulo theories; it generalizes SAT to formulas involving integers, strings, arrays, 
+and so on (the details of how it can do this are interesting but complicated, and we probably wont be able 
+to get to them in class). For example, we can use Z3 to find a solution for the system of equations 3x - 2y = 1, y - x = 1.
 """
 def integer_expressions():
     x,y = Ints('x y')
     s=Solver()
-    s.add(3*x-2*y==1)
-    s.add(y-x==1)
+    s.add(3*x - 2*y == 1)
+    s.add(y - x == 1)
 
     match s.check():
         case z3.sat:
@@ -81,7 +87,8 @@ def integer_expressions():
             print(model)
 
 """
-In addition to integers Z3 can solve systems of equations that use real numbers. These can get quite complex and also very useful potentially for some of your final projects.
+In addition to integers Z3 can solve systems of equations that use real numbers. 
+These can get quite complex and also very useful potentially for some of your final projects.
 """
 
 def real_artithmetic():
@@ -98,8 +105,12 @@ def real_artithmetic():
             print ("UNSAT")
 
 """
-One of the most prominent uses of SMT in industry (especially now when so much software is being produced with little else to ensure correctness) is in software verification. You can see how we can prove interesting properties about programs including relating logical properties with underlying representation properties.
+One of the most prominent uses of SMT in industry (especially now when so much software is being 
+produced with little else to ensure correctness) is in software verification. You can see how we 
+can prove interesting properties about programs including relating logical properties with 
+underlying representation properties.
 """
+
 def integer_overflow():
     # Note this takes a long time to process!
     x = BitVec('x', 16)
@@ -115,21 +126,25 @@ def integer_overflow():
             print ("UNSAT")
 
 
-
-
 """
-Often, SMT solvers are not used to find a solution, but to prove that no solution exists. For instance, say that we want to prove the mathematical fact y > 0 ==> x + y > x. How might we do this using z3?
+Often, SMT solvers are not used to find a solution, but to prove that no solution exists. 
+For instance, say that we want to prove the mathematical fact y > 0 ==> x + y > x. 
+How might we do this using z3?
 """
 def proof_by_unsat():
     # y>0 => x+y > x
     x,y = Ints('x y')
     s = Solver()
 
-    # TODO: YOUR CODE HERE
+    # Negating implication
+    # showing the negation isn't possible
+    # i.e if y > 0 then x + y > 0 cannot be false
+    s.add(Not( Implies((y > 0), (x + y > x))))
 
     match s.check():
         case z3.unsat:
-           print("The formula is UNSAT, meaning no contradiction can be found. Therefore the original formula must always be true.  QED.")
+           print("The formula is UNSAT, meaning no contradiction can be found. " \
+           "Therefore the original formula must always be true.  QED. \n")
 
 
 """
@@ -141,17 +156,28 @@ def demorgans_proof():
 
     def prove(f):
         """
-        Print "No counterexample can be found, therefore the statement is true" if the given formula f is true, otherwise print "The formula f is false, with counterexample given by: " and the model that shows the formula to be false.
+        Print "No counterexample can be found, therefore the statement is true" if the given 
+        formula f is true, otherwise print "The formula f is false, with counterexample 
+        given by: " and the model that shows the formula to be false.
         """
-        # TODO: YOUR CODE HERE
-        pass
+        s = Solver()
+        s.add(Not(f))
+
+        match s.check():
+            case z3.unsat:
+                print("No counterexample can be found, therefore the statement is true\n")
+            case z3.sat:
+                print(f"The formula f is false, with counterexample given by: {s.model()}\n")
 
     prove(demorgan)
 
 
 """
-Let us try to use z3 to solve a classic kind of puzzle. You will need to come up with an encoding of the relevant part of the puzzle into variables and constraints as well translate the output of the solver into a solution.
+Let us try to use z3 to solve a classic kind of puzzle. You will need to come up with an 
+encoding of the relevant part of the puzzle into variables and constraints as well 
+translate the output of the solver into a solution.
 """
+
 def wedding_planning():
     """
     You need to assign seating for a table of three potentially contentious wedding guests.
@@ -184,9 +210,11 @@ def wedding_planning():
 """
 Lets try to solve a more complex puzzle like sudoku, given an arbitrary input.
 
-In case you do not know, sudoku is a puzzle where the goal is to insert numbers in boxes to satisfy the following condition: each row, column, and 3x3 box must contain the digits 1 through 9 exactly once.
+In case you do not know, sudoku is a puzzle where the goal is to insert numbers in boxes to satisfy the 
+following condition: each row, column, and 3x3 box must contain the digits 1 through 9 exactly once.
 
-You will need to transform an arbitrary sudoku puzzle template (where zero represents the unfilled boxes) into a solved puzzle (or show that the puzzle is impossible).
+You will need to transform an arbitrary sudoku puzzle template (where zero represents the unfilled boxes) 
+into a solved puzzle (or show that the puzzle is impossible).
 """
 
 def print_sudoku(grid):
@@ -219,7 +247,9 @@ instance = ((0,0,0,0,9,4,0,3,0),
 
 
 """
-The final puzzle you will solve using Z3 is the Coin Sum problem. Here in the US we have (or used to have) pennies worth 1 cent, nickels worth 5 cents, dimes worth 10 cents, quarters worth 25 cents, half dollar coins worth 50 cents, and dollar coins worth 100 cents.
+The final puzzle you will solve using Z3 is the Coin Sum problem. Here in the US we have (or used to have)
+pennies worth 1 cent, nickels worth 5 cents, dimes worth 10 cents, quarters worth 25 cents, half dollar 
+coins worth 50 cents, and dollar coins worth 100 cents.
 
 It is possible to make $2 using these coins in the following way:
 
