@@ -313,6 +313,7 @@ def sudoku(puzzle):
                     box_values.append(board [row + i][col + x])
             s.add(Distinct(*box_values))
 
+    # Solve
     match s.check():
         case z3.unsat:
             print("The puzzle is impossible.")
@@ -339,7 +340,7 @@ instance = ((0,0,0,0,9,4,0,3,0),
             (9,0,0,0,6,5,0,0,0),
             (0,4,0,9,7,0,0,0,0))
 
-sudoku(instance)
+# sudoku(instance)
 
 
 """
@@ -354,14 +355,53 @@ It is possible to make $2 using these coins in the following way:
 The question is: How many ways can $2 be made using any number of coins?
 """
 
-def coin_sum(total):
-    # Variables for the numbers of each coin denomination
-    p,n,d,q,f,d = Ints('p n d q f d')
+def get_model(s : Solver): 
+    match s.check():
+        case z3.unsat:
+            return None
+        case z3.sat:
+            m = s.model()
+            return m
+        
+def model_to_clause(m):
+    clause_list = []
+    for x in m.decls():
+        var = x()  # get the Z3 variable
+        clause_list.append(var == m[x])
+    return And(clause_list)
 
+def coin_sum(total : float):
+    """ Print the number of ways the total (in dolalrs)
+    can be made using any number of the above coins. """
 
-    """
-    Print the number of ways the $2 can be made using any number of the above coins.
+    p,n,di,q,h,d = Ints('p n di q h d')
+    t_cents = Int('t')
+    s = Solver()
 
-    Hint: You may need to run many related but slightly different model checks.
-    """
-    # TODO: YOUR CODE HERE
+    # The Function
+    d_x = d * 100
+    h_y = h * 50
+    q_z = q * 25
+    di_i = di * 10
+    n_j = n * 5
+    p_k = p * 1
+    t_cents = int(round(total * 100))
+    f = d_x + h_y + q_z + di_i + n_j + p_k == t_cents
+
+    # Constraint
+    s.add(f)
+    # Values are positive
+    s.add(p >= 0, n >= 0, di >= 0, q >= 0, h >= 0, d >= 0)
+
+    count = 0
+    solution = get_model(s)
+    while (solution != None):
+        clause = model_to_clause(solution)
+        s.add(Not(clause)) # Remove model from space 
+        count+= 1
+        solution = get_model(s)
+    
+    print(count)
+    return
+
+coin_sum(2.00)
