@@ -39,6 +39,7 @@ class PuzzleWizard(WizardAgent):
 
         fire_stones = state.get_all_tile_locations(FireStone)
         ice_stones = state.get_all_tile_locations(IceStone)
+        walls = state.get_all_tile_locations(Wall)
         height, width = state.grid_size
         wizard_location = state.active_entity_location
 
@@ -94,32 +95,53 @@ class PuzzleWizard(WizardAgent):
 
         # Fire Stones
         for f_stone in fire_stones:
-            self.s.add(turn_on(f_stone.row, f_stone.col))
-            # More Rules to add...
+            r = f_stone.row
+            c = f_stone.col
+            self.s.add(turn_on(r, c))
+ 
+            self.s.add(Implies( 
+                And(connections['up'][r][c], connections['right'][r][c]), # remember this is Bidirectional
+                And(straight_on(r - 1, c), straight_on(r, c + 1))
+            ))
+            self.s.add(Implies( 
+                And(connections['up'][r][c], connections['left'][r][c]),
+                And(straight_on(r - 1, c), straight_on(r, c - 1))
+            ))
+            self.s.add(Implies( 
+                And(connections['down'][r][c], connections['left'][r][c]),
+                And(straight_on(r + 1, c), straight_on(r, c - 1))
+            ))
+            self.s.add(Implies( 
+                And(connections['down'][r][c], connections['right'][r][c]),
+                And(straight_on(r + 1, c), straight_on(r, c + 1))
+            ))
+
         
         # Ice Stones
         for i_stone in ice_stones:
-            self.s.add(straight_on(i_stone.row, i_stone.col))
-            # If up down
-                # then staright above, and turn under
-                    # or turn above and straight under
-            # if left and right
-                # then staright left, and turn right
-                    # or turn left and straight right
+            r = i_stone.row
+            c = i_stone.col
+            self.s.add(straight_on(r, c)) # Tile rule
+            
+            ud_stone = Implies(And(connections['up'][r][c], connections['down'][r][c]), # moving vertical
+                    Or(turn_on(r-1, c), turn_on(r+1, c)))
+
+            lr_stone = Implies(And(connections['left'][r][c], connections['right'][r][c]), # moving horizontal
+                    Or(turn_on(r, c+1), turn_on(r, c-1)))
+            
+            self.s.add(lr_stone)
+            self.s.add(ud_stone)
+    
         
-        # Invalid Moves
-        for c in range(width):
-            self.s.add(no_move(0, c))             # top row
-            self.s.add(no_move(height - 1, c))    # bottom row
-        for r in range(height):
-            self.s.add(no_move(r, 0))             # left column
-            self.s.add(no_move(r, width - 1))     # right column
+        # Invalid Moves (Walls)
+        for wall in walls:
+            self.s.add(no_move(wall.col, wall.row))
 
         # All open gates are connected
         for r in range(1, height-1): # -1 works because of our barriers
             for c in range(1, width-1):
-                self.s.add(Implies(connections['up'][r][c], connections['down'][r-1][c])) # Connected above
-                self.s.add(Implies(connections['down'][r][c], connections['up'][r+1][c])) # Connected under
+                self.s.add(Implies(connections['up'][r][c], connections['down'][r-1][c])) # Connected up
+                self.s.add(Implies(connections['down'][r][c], connections['up'][r+1][c])) # Connected down
                 self.s.add(Implies(connections['right'][r][c], connections['left'][r][c+1])) #...
                 self.s.add(Implies(connections['left'][r][c], connections['right'][r][c-1]))
 
@@ -128,14 +150,19 @@ class PuzzleWizard(WizardAgent):
                 m = self.s.model()
                 
                 # ChatGPT Debug Loop :)
-                for r in range(height):
-                    for c in range(width):
+                for r in range(height-1):
+                    for c in range(width-1):
                         up = bool(m.evaluate(connections['up'][r][c]))
                         down = bool(m.evaluate(connections['down'][r][c]))
                         left = bool(m.evaluate(connections['left'][r][c]))
                         right = bool(m.evaluate(connections['right'][r][c]))
-
-                        if up and down and not left and not right:
+                        if (Location(r,c) == wizard_location):
+                            symbol = "s"
+                        elif (Location(r,c) in fire_stones):
+                            symbol = "f"
+                        elif (Location(r,c) in ice_stones):
+                            symbol = "i"
+                        elif up and down and not left and not right:
                             symbol = "│"
                         elif left and right and not up and not down:
                             symbol = "─"
@@ -149,6 +176,7 @@ class PuzzleWizard(WizardAgent):
                             symbol = "┘"
                         elif not up and not down and not left and not right:
                             symbol = "."
+
                         else:
                             symbol = "?"
 
