@@ -17,9 +17,7 @@ from z3 import (Solver, Bool, Bools, Int, Ints, Or, Not, And, Implies, Distinct,
 class PuzzleWizard(WizardAgent):
     solution: list[WizardMoves]
 
-
     def __init__(self, initial_state: GameState):
-        self.s = Solver()
         self.solution = None
 
     def react(self, state: GameState) -> WizardMoves:
@@ -90,6 +88,7 @@ class PuzzleWizard(WizardAgent):
         walls = state.get_all_tile_locations(Wall)
         height, width = state.grid_size
         wizard_location = state.active_entity_location
+        s = Solver()
 
         # Gate for each direction
         connections = { 'up' : [], 'down' : [], 'left' : [], 'right' : []}
@@ -139,48 +138,48 @@ class PuzzleWizard(WizardAgent):
         for r in range(height):
             for c in range(width):
                 moves = Or(turn_on(r,c), straight_on(r,c), no_move(r,c))
-                self.s.add(moves)
+                s.add(moves)
 
         # Fire Stones
         for f_stone in fire_stones:
             r, c = (f_stone.row, f_stone.col)
-            self.s.add(turn_on(r, c)) # Tile rule
+            s.add(turn_on(r, c)) # Tile rule
 
-            self.s.add(Implies( # Each type of turn's outer tiles are straight
+            s.add(Implies( # Each type of turn's outer tiles are straight
                 And(connections['up'][r][c], connections['right'][r][c]), # we don't care about direction
                 And(straight_on(r - 1, c), straight_on(r, c + 1))))
-            self.s.add(Implies( 
+            s.add(Implies( 
                 And(connections['up'][r][c], connections['left'][r][c]),
                 And(straight_on(r - 1, c), straight_on(r, c - 1))))
-            self.s.add(Implies( 
+            s.add(Implies( 
                 And(connections['down'][r][c], connections['left'][r][c]),
                 And(straight_on(r + 1, c), straight_on(r, c - 1))))
-            self.s.add(Implies( 
+            s.add(Implies( 
                 And(connections['down'][r][c], connections['right'][r][c]),
                 And(straight_on(r + 1, c), straight_on(r, c + 1))))
 
         # Ice Stones
         for i_stone in ice_stones:
             (r, c) = (i_stone.row, i_stone.col)
-            self.s.add(straight_on(r, c)) # Tile rule
+            s.add(straight_on(r, c)) # Tile rule
             
             # Atleast one turn before or after the tile
-            self.s.add(Implies(And(connections['up'][r][c], connections['down'][r][c]),
+            s.add(Implies(And(connections['up'][r][c], connections['down'][r][c]),
                     Or(turn_on(r-1, c), turn_on(r+1, c))))
-            self.s.add(Implies(And(connections['left'][r][c], connections['right'][r][c]),
+            s.add(Implies(And(connections['left'][r][c], connections['right'][r][c]),
                     Or(turn_on(r, c+1), turn_on(r, c-1))))
     
         # Invalid Moves (Walls)
         for wall in walls:
-            self.s.add(no_move(wall.row, wall.col))
+            s.add(no_move(wall.row, wall.col))
 
         # All open gates are connected
         for r in range(1, height-1):
             for c in range(1, width-1):
-                self.s.add(Implies(connections['up'][r][c], connections['down'][r-1][c])) # Connected up
-                self.s.add(Implies(connections['down'][r][c], connections['up'][r+1][c])) # Connected down
-                self.s.add(Implies(connections['right'][r][c], connections['left'][r][c+1])) #...
-                self.s.add(Implies(connections['left'][r][c], connections['right'][r][c-1]))
+                s.add(Implies(connections['up'][r][c], connections['down'][r-1][c])) # Connected up
+                s.add(Implies(connections['down'][r][c], connections['up'][r+1][c])) # Connected down
+                s.add(Implies(connections['right'][r][c], connections['left'][r][c+1])) #...
+                s.add(Implies(connections['left'][r][c], connections['right'][r][c-1]))
 
         dist = [] # Each tile has distance from the start
         for r in range(height):
@@ -190,16 +189,16 @@ class PuzzleWizard(WizardAgent):
             dist.append(row)
 
         # The starting tile (distance == 0)
-        self.s.add(Not(no_move(wizard_location.row, wizard_location.col)))
-        self.s.add(dist[wizard_location.row][wizard_location.col] == 0)
+        s.add(Not(no_move(wizard_location.row, wizard_location.col)))
+        s.add(dist[wizard_location.row][wizard_location.col] == 0)
     
         max_dist = height * width # visiting every tile
         # Other tiles Initialized
         for r in range(height):
             for c in range(width):
                 in_path = Not(no_move(r, c))
-                self.s.add(Implies(in_path, And(dist[r][c] >= 0, dist[r][c] <= max_dist))) # is a valid dist
-                self.s.add(Implies(no_move(r, c), dist[r][c] == -1)) # Not part of path
+                s.add(Implies(in_path, And(dist[r][c] >= 0, dist[r][c] <= max_dist))) # is a valid dist
+                s.add(Implies(no_move(r, c), dist[r][c] == -1)) # Not part of path
         
         # A single cycle
         for r in range(1, height - 1):
@@ -214,26 +213,42 @@ class PuzzleWizard(WizardAgent):
                     And(connections['right'][r][c], dist[r][c+1] == dist[r][c] - 1))
                 
                 # Every tile used is a valid distance away
-                self.s.add(Implies(And(in_path, Not(is_start)), has_previous_path_tile)) # Path Moves Forward
+                s.add(Implies(And(in_path, Not(is_start)), has_previous_path_tile)) # Path Moves Forward
                         
 
-        match self.s.check():
+        match s.check():
             case z3.sat:
-                m = self.s.model()
+                m = s.model()
                 self.solution = self.model_to_path(m, wizard_location, connections)
             case z3.unsat:
                 print("UNSAT :(\n")
     
 
-class SpellCastingPuzzleWizard(WizardAgent):
+class SpellCastingPuzzleWizard(PuzzleWizard):
+    solution: list[WizardMoves]
 
     def react(self, state: GameState) -> GameAction:
+
+        if self.solution is None:
+            PuzzleWizard.solution = self.solve_magic_puzzle(state)
+
+        return self.solution.pop(0)
+    
+    def solve_magic_puzzle(self, state):
+
+        if (len(neutral_stones) == 0): # Don't need to do anything
+            self.solve_puzzle(state)
+            return 
+
         fire_stones = state.get_all_tile_locations(FireStone)
         ice_stones = state.get_all_tile_locations(IceStone)
         neutral_stones = state.get_all_tile_locations(NeutralStone)
 
         grid_size = state.grid_size
         wizard_location = state.active_entity_location
+
+        if (len(neutral_stones) == 0):
+
 
         # TODO: YOUR CODE HERE
         return MASYU_2_SOLUTION.pop(0)
