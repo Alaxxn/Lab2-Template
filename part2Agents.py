@@ -247,8 +247,6 @@ class SpellCastingPuzzleWizard(PuzzleWizard):
         grid_size = state.grid_size
         wizard_location = state.active_entity_location
 
-        if (len(neutral_stones) == 0):
-
 
         # TODO: YOUR CODE HERE
         return MASYU_2_SOLUTION.pop(0)
