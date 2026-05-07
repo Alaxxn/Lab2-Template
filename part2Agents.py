@@ -30,10 +30,58 @@ class PuzzleWizard(WizardAgent):
 
         return self.solution.pop(0)        
 
-    def model_to_path(self, wiz_start, model):
+    def get_next_location (self, model, connections, prev : Location, curr : Location):
+        """ returns the move to get to the next location, and the resulting tile"""
+        x,y = (curr.row, curr.col)
+
+        outputs = {
+            'up': (WizardMoves.UP, Location(curr.row - 1, curr.col)),
+            'down': (WizardMoves.DOWN, Location(curr.row + 1, curr.col)),
+            'left': (WizardMoves.LEFT, Location(curr.row, curr.col - 1)),
+            'right': (WizardMoves.RIGHT, Location(curr.row, curr.col + 1))
+        }
+        
+        gates = []
+        for direction in connections:
+            is_open = model.evaluate(connections[direction][x][y])
+            if (is_open): 
+                gates.append(direction)
+
+        if (prev == None): # is Start
+            next_gate = gates.pop() # Choose any direction
+            return outputs[next_gate]
+
+        # Remove gate we came in from
+        if (prev.col < curr.col):
+            gates.pop(gates.index("left"))
+        elif (prev.col > curr.col):
+            gates.pop(gates.index("right"))
+        elif (prev.row < curr.row):
+            gates.pop(gates.index("up"))
+        else:
+            gates.pop(gates.index("down"))
+
+        # This is where we have to be going
+        next_gate = gates.pop()
+        return outputs[next_gate]
+
+    def model_to_path(self, model, wiz : Location, connections):
+
         moves = []
-        prev = (wiz_start.row, wiz_start.col)
-        return MASYU_1_SOLUTION
+        prev = None
+        curr = wiz
+        next_tile = None
+
+        while (True):
+            if (next_tile == wiz): # Cycle Complete
+                break
+            move, next_tile = self.get_next_location(model, connections, prev, curr)
+            moves.append(move)
+            prev = curr
+            curr = next_tile
+        
+        print(moves)
+        return moves
 
     def solve_puzzle(self, state: GameState):
 
@@ -95,101 +143,87 @@ class PuzzleWizard(WizardAgent):
 
         # Fire Stones
         for f_stone in fire_stones:
-            r = f_stone.row
-            c = f_stone.col
-            self.s.add(turn_on(r, c))
- 
-            self.s.add(Implies( 
-                And(connections['up'][r][c], connections['right'][r][c]), # remember this is Bidirectional
-                And(straight_on(r - 1, c), straight_on(r, c + 1))
-            ))
+            r, c = (f_stone.row, f_stone.col)
+            self.s.add(turn_on(r, c)) # Tile rule
+
+            self.s.add(Implies( # Each type of turn's outer tiles are straight
+                And(connections['up'][r][c], connections['right'][r][c]), # we don't care about direction
+                And(straight_on(r - 1, c), straight_on(r, c + 1))))
             self.s.add(Implies( 
                 And(connections['up'][r][c], connections['left'][r][c]),
-                And(straight_on(r - 1, c), straight_on(r, c - 1))
-            ))
+                And(straight_on(r - 1, c), straight_on(r, c - 1))))
             self.s.add(Implies( 
                 And(connections['down'][r][c], connections['left'][r][c]),
-                And(straight_on(r + 1, c), straight_on(r, c - 1))
-            ))
+                And(straight_on(r + 1, c), straight_on(r, c - 1))))
             self.s.add(Implies( 
                 And(connections['down'][r][c], connections['right'][r][c]),
-                And(straight_on(r + 1, c), straight_on(r, c + 1))
-            ))
+                And(straight_on(r + 1, c), straight_on(r, c + 1))))
 
-        
         # Ice Stones
         for i_stone in ice_stones:
-            r = i_stone.row
-            c = i_stone.col
+            (r, c) = (i_stone.row, i_stone.col)
             self.s.add(straight_on(r, c)) # Tile rule
             
-            ud_stone = Implies(And(connections['up'][r][c], connections['down'][r][c]), # moving vertical
-                    Or(turn_on(r-1, c), turn_on(r+1, c)))
-
-            lr_stone = Implies(And(connections['left'][r][c], connections['right'][r][c]), # moving horizontal
-                    Or(turn_on(r, c+1), turn_on(r, c-1)))
-            
-            self.s.add(lr_stone)
-            self.s.add(ud_stone)
+            # Atleast one turn before or after the tile
+            self.s.add(Implies(And(connections['up'][r][c], connections['down'][r][c]),
+                    Or(turn_on(r-1, c), turn_on(r+1, c))))
+            self.s.add(Implies(And(connections['left'][r][c], connections['right'][r][c]),
+                    Or(turn_on(r, c+1), turn_on(r, c-1))))
     
-        
         # Invalid Moves (Walls)
         for wall in walls:
-            self.s.add(no_move(wall.col, wall.row))
+            self.s.add(no_move(wall.row, wall.col))
 
         # All open gates are connected
-        for r in range(1, height-1): # -1 works because of our barriers
+        for r in range(1, height-1):
             for c in range(1, width-1):
                 self.s.add(Implies(connections['up'][r][c], connections['down'][r-1][c])) # Connected up
                 self.s.add(Implies(connections['down'][r][c], connections['up'][r+1][c])) # Connected down
                 self.s.add(Implies(connections['right'][r][c], connections['left'][r][c+1])) #...
                 self.s.add(Implies(connections['left'][r][c], connections['right'][r][c-1]))
 
+        dist = [] # Each tile has distance from the start
+        for r in range(height):
+            row = []
+            for c in range(width):
+                row.append(Int(f"dist_{r}_{c}"))
+            dist.append(row)
+
+        # The starting tile (distance == 0)
+        self.s.add(Not(no_move(wizard_location.row, wizard_location.col)))
+        self.s.add(dist[wizard_location.row][wizard_location.col] == 0)
+    
+        max_dist = height * width # visiting every tile
+        # Other tiles Initialized
+        for r in range(height):
+            for c in range(width):
+                in_path = Not(no_move(r, c))
+                self.s.add(Implies(in_path, And(dist[r][c] >= 0, dist[r][c] <= max_dist))) # is a valid dist
+                self.s.add(Implies(no_move(r, c), dist[r][c] == -1)) # Not part of path
+        
+        # A single cycle
+        for r in range(1, height - 1):
+            for c in range(1, width - 1):
+                in_path = Not(no_move(r, c))
+                is_start = And(r == wizard_location.row, c == wizard_location.col)
+
+                has_previous_path_tile = Or( # The current tile is only a distance of +1 from the path to start
+                    And(connections['up'][r][c], dist[r-1][c] == dist[r][c] - 1),
+                    And(connections['down'][r][c], dist[r+1][c] == dist[r][c] - 1),
+                    And(connections['left'][r][c], dist[r][c-1] == dist[r][c] - 1),
+                    And(connections['right'][r][c], dist[r][c+1] == dist[r][c] - 1))
+                
+                # Every tile used is a valid distance away
+                self.s.add(Implies(And(in_path, Not(is_start)), has_previous_path_tile)) # Path Moves Forward
+                        
+
         match self.s.check():
             case z3.sat:
                 m = self.s.model()
-                
-                # ChatGPT Debug Loop :)
-                for r in range(height-1):
-                    for c in range(width-1):
-                        up = bool(m.evaluate(connections['up'][r][c]))
-                        down = bool(m.evaluate(connections['down'][r][c]))
-                        left = bool(m.evaluate(connections['left'][r][c]))
-                        right = bool(m.evaluate(connections['right'][r][c]))
-                        if (Location(r,c) == wizard_location):
-                            symbol = "s"
-                        elif (Location(r,c) in fire_stones):
-                            symbol = "f"
-                        elif (Location(r,c) in ice_stones):
-                            symbol = "i"
-                        elif up and down and not left and not right:
-                            symbol = "│"
-                        elif left and right and not up and not down:
-                            symbol = "─"
-                        elif down and right and not up and not left:
-                            symbol = "┌"
-                        elif down and left and not up and not right:
-                            symbol = "┐"
-                        elif up and right and not down and not left:
-                            symbol = "└"
-                        elif up and left and not down and not right:
-                            symbol = "┘"
-                        elif not up and not down and not left and not right:
-                            symbol = "."
-
-                        else:
-                            symbol = "?"
-
-                        print(symbol, end=" ")
-                    print()
-                self.solution = self.model_to_path(wizard_location, m)
-
+                self.solution = self.model_to_path(m, wizard_location, connections)
             case z3.unsat:
                 print("UNSAT :(\n")
-
-        self.solution = MASYU_1_SOLUTION # DELETE ME  
-
-        
+    
 
 class SpellCastingPuzzleWizard(WizardAgent):
 
