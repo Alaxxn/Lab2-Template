@@ -225,20 +225,13 @@ class PuzzleWizard(WizardAgent):
     
 
 class SpellCastingPuzzleWizard(PuzzleWizard):
-    solution: list[WizardMoves]
 
     def react(self, state: GameState) -> GameAction:
-
         if self.solution is None:
             PuzzleWizard.solution = self.solve_magic_puzzle(state)
-
         return self.solution.pop(0)
     
     def solve_magic_puzzle(self, state):
-
-        if (len(neutral_stones) == 0): # Don't need to do anything
-            self.solve_puzzle(state)
-            return 
 
         fire_stones = state.get_all_tile_locations(FireStone)
         ice_stones = state.get_all_tile_locations(IceStone)
@@ -247,9 +240,12 @@ class SpellCastingPuzzleWizard(PuzzleWizard):
         grid_size = state.grid_size
         wizard_location = state.active_entity_location
 
+        if (len(neutral_stones) == 0): # Don't need to do anything
+            self.solve_puzzle(state)
+            return 
 
         # TODO: YOUR CODE HERE
-        return MASYU_2_SOLUTION.pop(0)
+        self.solution = MASYU_2_SOLUTION
 
 
 """
