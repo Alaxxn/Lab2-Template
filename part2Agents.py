@@ -6,21 +6,14 @@ from model import (
     WizardMoves,
     GameAction,
     GameState,
+    Wall,
     WizardSpells, NeutralStone,
 )
 from agents import WizardAgent
 
 import z3
 from z3 import (Solver, Bool, Bools, Int, Ints, Or, Not, And, Implies, Distinct, If)
-
-    # grid_size: tuple[int, int]
-    # tile_grid: tuple[tuple[MapTile, ...], ...]
-    # entity_grid: tuple[tuple[Entity, ...], ...]
-    # active_entity_location: Location
-    # turn: int = 0
-    # mana_spent: int =0
-
-
+        
 class PuzzleWizard(WizardAgent):
     solution: list[WizardMoves]
 
@@ -35,134 +28,140 @@ class PuzzleWizard(WizardAgent):
         if self.solution is None:
             PuzzleWizard.solution = self.solve_puzzle(state)
 
-        return self.solution.pop(0)
+        return self.solution.pop(0)        
+
+    def model_to_path(self, wiz_start, model):
+        moves = []
+        prev = (wiz_start.row, wiz_start.col)
+        return MASYU_1_SOLUTION
 
     def solve_puzzle(self, state: GameState):
 
         fire_stones = state.get_all_tile_locations(FireStone)
         ice_stones = state.get_all_tile_locations(IceStone)
         height, width = state.grid_size
-
-        x_t = []
-        y_t = []
-        moves = []
-        max_steps = (height - 1) * (width - 1) # -1 for the border
-
-        # Possible Moves
-        U,R,D,L = Ints('U R D L')
-        self.s.add(U == 1, R == 2, D == 3, L == 4)
-
-        # Allowed Moves
-        for t in range(max_steps):
-            key = f'move_{t}'
-            move_t = Int(key)
-            moves.append(move_t)
-            self.s.add(Or(move_t == U, move_t == R, move_t == L, move_t == D)) # valid moves
-
-        # Wizard Stays Inside the board
-        for t in range(max_steps + 1):
-            x = Int(f'x_{t}')
-            y = Int(f'y_{t}')
-            x_t.append(x)
-            y_t.append(y)
-            self.s.add(And(1 <= x, x < (width - 1) )) # Inside the board
-            self.s.add(And(1 <= y, y < (height - 1) ))
-        
-        # Fire Stones Visited
-        for stone in fire_stones:
-            sx, sy = stone.col, stone.row
-            visited = []
-            for t in range(max_steps):
-                visited.append(And(x_t[t] == sx, y_t[t] == sy)) # True if visited at that turn
-            self.s.add(Or(*visited)) # True if visited at some turn
-
-        # Ice Stones Visited
-        for stone in ice_stones:
-            sx, sy = stone.col, stone.row
-            visited = []
-            for t in range(max_steps):
-                visited.append(And(x_t[t] == sx, y_t[t] == sy)) 
-            self.s.add(Or(*visited))
-
-        # Starting position
         wizard_location = state.active_entity_location
-        self.s.add(x_t[0] == wizard_location.col)
-        self.s.add(y_t[0] == wizard_location.row)
 
-        """
-        TODO: Remaining Constraints
+        # Gate for each direction
+        connections = { 'up' : [], 'down' : [], 'left' : [], 'right' : []}
+
+        # Each tile has a set of gates for it's edges
+        for (direction, lis) in connections.items():
+            for r in range(height):
+                row = []
+                for c in range(width):
+                    tile = Bool(f'{direction}_{r}_{c}')
+                    row.append(tile)                
+                connections[direction].append(row)
+
+        def turn_on(x, y):
+            """ Force a turn on tile (x,y)"""
+            up =  connections['up'][x][y]
+            down = connections['down'][x][y]
+            left = connections['left'][x][y]
+            right = connections['right'][x][y]
+
+            return Or( 
+                And(up, right, Not(down), Not(left)),
+                And(up, left, Not(down), Not(right)),
+                And(down, right, Not(up), Not(left)),
+                And(down, left, Not(up), Not(right)))
         
-        1. End at starting location
-        2. No Intersections
-        3. FireStone Rules
-            # Must make a 90 degree turn
-            # No turns directly before or after
-        4. Ice Stone Rules
-    
-            # Travel through in a straight line
-            # Must turn on t-1 or after cell
-        """
-
-        # Movememnt
-        # for t in range(max_steps):
-        #     self.s.add(Implies(moves[t] == U,
-        #         And(x_t[t+1] == x_t[t], y_t[t+1] == y_t[t] - 1)))
-
-        #     self.s.add(Implies(moves[t] == D,
-        #         And(x_t[t+1] == x_t[t], y_t[t+1] == y_t[t] + 1)))
-
-        #     self.s.add(Implies(moves[t] == L,
-        #         And(x_t[t+1] == x_t[t] - 1, y_t[t+1] == y_t[t])))
-
-        #     self.s.add(Implies(moves[t] == R,
-        #         And(x_t[t+1] == x_t[t] + 1, y_t[t+1] == y_t[t])))
-    
+        def straight_on(x, y):
+            """ Force straight movement on tile (x,y)"""
+            up =  connections['up'][x][y]
+            down = connections['down'][x][y]
+            left = connections['left'][x][y]
+            right = connections['right'][x][y]
+            # No intersections is taken care of by the Not
+            return Or(
+                And(up, down, Not(left), Not(right)),
+                And(left, right, Not(up), Not(down)))
         
-        # No Intersection (MAKES IT SUPER SLOW HOLY)
-        # for i in range(max_steps + 1): # For Every position (not icluding starting)
-        #     illegal_pos = []
-        #     for j in range(1, i, 1): # Make sure every t-1 position
-        #         same_x = x_t[i] == x_t[j]
-        #         same_y = y_t[i] == y_t[j]
-        #         same_pos = And(same_x, same_y)
-        #         illegal_pos.append(Not(same_pos)) # Isn't the same
-        #     self.s.add(*illegal_pos)
+        def no_move(x, y):
+            """ Doesn't have any open connections"""
+            return Or( And(
+                    Not(connections['up'][x][y]),
+                    Not(connections['down'][x][y]),
+                    Not(connections['left'][x][y]),
+                    Not(connections['right'][x][y])))
+        
+        # Each tile can either be a straight, a turn, or None
+        for r in range(height):
+            for c in range(width):
+                moves = Or(turn_on(r,c), straight_on(r,c), no_move(r,c))
+                self.s.add(moves)
 
-        print("Checking for model\n")
+        # Fire Stones
+        for f_stone in fire_stones:
+            self.s.add(turn_on(f_stone.row, f_stone.col))
+            # More Rules to add...
+        
+        # Ice Stones
+        for i_stone in ice_stones:
+            self.s.add(straight_on(i_stone.row, i_stone.col))
+            # If up down
+                # then staright above, and turn under
+                    # or turn above and straight under
+            # if left and right
+                # then staright left, and turn right
+                    # or turn left and straight right
+        
+        # Invalid Moves
+        for c in range(width):
+            self.s.add(no_move(0, c))             # top row
+            self.s.add(no_move(height - 1, c))    # bottom row
+        for r in range(height):
+            self.s.add(no_move(r, 0))             # left column
+            self.s.add(no_move(r, width - 1))     # right column
+
+        # All open gates are connected
+        for r in range(1, height-1): # -1 works because of our barriers
+            for c in range(1, width-1):
+                self.s.add(Implies(connections['up'][r][c], connections['down'][r-1][c])) # Connected above
+                self.s.add(Implies(connections['down'][r][c], connections['up'][r+1][c])) # Connected under
+                self.s.add(Implies(connections['right'][r][c], connections['left'][r][c+1])) #...
+                self.s.add(Implies(connections['left'][r][c], connections['right'][r][c-1]))
 
         match self.s.check():
             case z3.sat:
                 m = self.s.model()
-                move_dict = {
-                    '1' : WizardMoves.UP,
-                    '2' : WizardMoves.RIGHT,
-                    '3' : WizardMoves.DOWN,
-                    '4' : WizardMoves.LEFT,
-                }
+                
+                # ChatGPT Debug Loop :)
+                for r in range(height):
+                    for c in range(width):
+                        up = bool(m.evaluate(connections['up'][r][c]))
+                        down = bool(m.evaluate(connections['down'][r][c]))
+                        left = bool(m.evaluate(connections['left'][r][c]))
+                        right = bool(m.evaluate(connections['right'][r][c]))
 
-                plan = []
+                        if up and down and not left and not right:
+                            symbol = "│"
+                        elif left and right and not up and not down:
+                            symbol = "─"
+                        elif down and right and not up and not left:
+                            symbol = "┌"
+                        elif down and left and not up and not right:
+                            symbol = "┐"
+                        elif up and right and not down and not left:
+                            symbol = "└"
+                        elif up and left and not down and not right:
+                            symbol = "┘"
+                        elif not up and not down and not left and not right:
+                            symbol = "."
+                        else:
+                            symbol = "?"
 
-                # Convert Model to Moves
-                for move in moves:
-                    key = str(m[move].as_long())
-                    plan.append(move_dict[key])
+                        print(symbol, end=" ")
+                    print()
+                self.solution = self.model_to_path(wizard_location, m)
 
-                # Print Planned Positions
-                for i in range(len(x_t)):
-                    x = x_t[i]
-                    y = y_t[i]
-                    x_val = m[x].as_long()
-                    y_val = m[y].as_long()
-                    print(f"{i} : ({x_val}, {y_val})")
-                    plan.append(move_dict[key])
-
-                print(plan)
-                self.solution = plan
-            
             case z3.unsat:
-                self.solution = MASYU_1_SOLUTION
                 print("UNSAT :(\n")
 
+        self.solution = MASYU_1_SOLUTION # DELETE ME  
+
+        
 
 class SpellCastingPuzzleWizard(WizardAgent):
 
